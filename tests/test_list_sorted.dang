@@ -1,0 +1,25 @@
+# Test list.sorted method
+
+# Strings sort in byte order, as Go's sort.Strings
+assert { ["b", "c", "a"].sorted == ["a", "b", "c"] }
+assert { ["a/b", "a.go", "B", "a"].sorted == ["B", "a", "a.go", "a/b"] }
+
+# Duplicates are kept
+assert { ["b", "a", "b"].sorted == ["a", "b", "b"] }
+
+# Numbers sort by value
+assert { [3, 1, 2].sorted == [1, 2, 3] }
+assert { [2.5, 1.5, 3.5].sorted == [1.5, 2.5, 3.5] }
+
+# Empty and single-element lists
+let empty: [String!]! = []
+assert { empty.sorted == [] }
+assert { ["x"].sorted == ["x"] }
+
+# The original list is unchanged
+let items = ["z", "y"]
+let ordered = items.sorted
+assert { items == ["z", "y"] }
+assert { ordered == ["y", "z"] }
+
+print("List sorted tests passed!")

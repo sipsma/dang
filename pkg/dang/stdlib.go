@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/vito/dang/v2/pkg/hm"
@@ -422,6 +424,31 @@ func registerStdlib() {
 				}
 			}
 
+			return ListValue{
+				Elements: result,
+				ElemType: list.ElemType,
+			}, nil
+		})
+
+	// List.sorted method: sorted -> [a]!
+	Method(ListTypeModule, "sorted").
+		Doc("returns a new list in ascending order: strings in byte order, as Go's sort.Strings, and numbers by value").
+		Example(`["b", "c", "a"].sorted`).
+		Returns(NonNull(ListOf(TypeVar('a')))).
+		Impl(func(ctx context.Context, self Value, args Args) (Value, error) {
+			list := self.(ListValue)
+			result := slices.Clone(list.Elements)
+			var cmpErr error
+			slices.SortStableFunc(result, func(a, b Value) int {
+				c, err := compareSortable(a, b)
+				if err != nil && cmpErr == nil {
+					cmpErr = err
+				}
+				return c
+			})
+			if cmpErr != nil {
+				return nil, cmpErr
+			}
 			return ListValue{
 				Elements: result,
 				ElemType: list.ElemType,
@@ -1196,4 +1223,30 @@ func callFunc(ctx context.Context, fn Value, args ...Value) (Value, error) {
 	}
 
 	return callable.Call(ctx, NewObject(NewType("_temp_", ObjectKind)), callArgs)
+}
+
+// compareSortable orders two elements of a list being sorted: strings by
+// bytes, and integers and floats by numeric value.
+func compareSortable(a, b Value) (int, error) {
+	switch av := a.(type) {
+	case StringValue:
+		if bv, ok := b.(StringValue); ok {
+			return strings.Compare(av.Val, bv.Val), nil
+		}
+	case IntValue:
+		switch bv := b.(type) {
+		case IntValue:
+			return cmp.Compare(av.Val, bv.Val), nil
+		case FloatValue:
+			return cmp.Compare(float64(av.Val), bv.Val), nil
+		}
+	case FloatValue:
+		switch bv := b.(type) {
+		case IntValue:
+			return cmp.Compare(av.Val, float64(bv.Val)), nil
+		case FloatValue:
+			return cmp.Compare(av.Val, bv.Val), nil
+		}
+	}
+	return 0, fmt.Errorf("sorted: cannot order %s and %s; only strings and numbers sort", a.Type(), b.Type())
 }
